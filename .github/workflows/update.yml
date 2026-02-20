@@ -1,0 +1,25 @@
+name: Update Feed
+on:
+  schedule:
+    - cron: '0 */3 * * *' # S'exécute toutes les 3 heures
+  workflow_dispatch:      # Permet de le lancer manuellement
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run script
+        run: python main.py
+      - name: Deploy
+        run: |
+          git config --global user.name "RSS-Bot"
+          git config --global user.email "bot@github.com"
+          git add index.html
+          git commit -m "Mise à jour automatique des actus" || exit 0
+          git push

@@ -2,7 +2,6 @@ import requests
 from bs4 import BeautifulSoup
 import feedparser
 from datetime import datetime
-import re
 
 # CONFIGURATION DE VOS SOURCES
 SOURCES = [
@@ -31,7 +30,6 @@ def get_articles():
             else:
                 resp = requests.get(src["url"], headers=headers, timeout=15)
                 soup = BeautifulSoup(resp.text, "html.parser")
-                # Cherche tous les liens qui ressemblent à des articles
                 for a in soup.find_all("a", href=True):
                     url = a['href']
                     if not url.startswith("http"):
@@ -39,7 +37,6 @@ def get_articles():
                         url = base + ("" if url.startswith("/") else "/") + url
                     
                     title = a.get_text().strip()
-                    # Filtre pour ne prendre que les vrais titres (plus de 25 car.)
                     if len(title) > 25 and "/category/" not in url and "facebook.com" not in url:
                         if url not in articles:
                             articles[url] = {"title": title, "link": url, "source": src["name"], "cat": src["cat"]}
@@ -49,8 +46,23 @@ def get_articles():
 
 def generate_html(data):
     now = datetime.now().strftime("%d/%m %H:%M")
-    cats = sorted(list(set(a['cat'] for a in data)))
     
+    # On prépare les boutons de catégories proprement pour éviter l'erreur de f-string
+    cats = sorted(list(set(a['cat'] for a in data)))
+    buttons_html = ""
+    for c in cats:
+        buttons_html += f'<button class="btn" onclick="setCat(\'{c}\', this)">{c.upper()}</button> '
+
+    # On prépare la liste des articles
+    articles_html = ""
+    for a in data:
+        articles_html += f"""
+        <div class="article" data-cat="{a['cat']}" data-title="{a['title']}">
+            <span class="tag">{a['cat']}</span><span class="src">{a['source']}</span>
+            <a href="{a['link']}" target="_blank">{a['title']}</a>
+            <div class="extra"></div>
+        </div>"""
+
     html = f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -77,54 +89,4 @@ def generate_html(data):
 <body>
     <div class="header">
         <h1>🇯🇵 Veille Japon</h1>
-        <input type="text" id="search" placeholder="Rechercher..." onkeyup="filter()">
-        <div class="filters">
-            <button class="btn btn-smart" id="smartBtn" onclick="toggleSmart()">Regroupement : ON</button>
-            <button class="btn active" onclick="setCat('all', this)">TOUT</button>
-            {" ".join([f'<button class="btn" onclick="setCat(\'{c}\', this)">{c.upper()}</button>' for c in cats])}
-        </div>
-    </div>
-    <div id="feed">
-        {"".join([f'<div class="article" data-cat="{a["cat"]}" data-title="{a["title"]}"><span class="tag">{a["cat"]}</span><span class="src">{a["source"]}</span><a href="{a["link"]}" target="_blank">{a["title"]}</a><div class="extra"></div></div>' for a in data])}
-    </div>
-    <script>
-        let currentCat = 'all'; let smartMode = true;
-        function toggleSmart() {{ smartMode = !smartMode; document.getElementById('smartBtn').innerText = "Regroupement : " + (smartMode ? "ON" : "OFF"); document.getElementById('smartBtn').classList.toggle('off', !smartMode); filter(); }}
-        function setCat(c, btn) {{ currentCat = c; document.querySelectorAll('.btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); filter(); }}
-        
-        function getSim(s1, s2) {{ 
-            let set1 = new Set(s1.toLowerCase().split('')); 
-            let set2 = new Set(s2.toLowerCase().split(''));
-            let inter = new Set([...set1].filter(x => set2.has(x)));
-            return inter.size / Math.max(set1.size, set2.size);
-        }}
-
-        function filter() {{
-            const query = document.getElementById('search').value.toLowerCase();
-            const articles = Array.from(document.querySelectorAll('.article'));
-            articles.forEach(a => {{ a.classList.remove('hidden'); a.querySelector('.extra').innerHTML = ''; }});
-            
-            let seen = [];
-            articles.forEach(a => {{
-                const t = a.getAttribute('data-title');
-                const c = a.getAttribute('data-cat');
-                let visible = (currentCat === 'all' || c === currentCat) && t.toLowerCase().includes(query);
-                
-                if (visible && smartMode) {{
-                    let dupe = seen.find(s => getSim(s.title, t) > 0.6);
-                    if (dupe) {{ 
-                        visible = false; 
-                        dupe.el.querySelector('.extra').innerHTML = `<span class="badge">+ Sujet similaire détecté</span>`;
-                    }} else {{ seen.push({{title: t, el: a}}); }}
-                }}
-                if (!visible) a.classList.add('hidden');
-            }});
-        }}
-        filter();
-    </script>
-</body></html>"""
-    with open("index.html", "w", encoding="utf-8") as f: f.write(html)
-
-if __name__ == "__main__":
-    data = get_articles()
-    generate_html(data)
+        <input type="text" id="search" placeholder="Recherche
